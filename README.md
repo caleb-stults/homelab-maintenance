@@ -13,6 +13,7 @@ The project is structured to handle diverse hardware constraints, specifically m
 * Storage: Synology NAS (Managed via API)
 
 ## Project Structure
+```text
 .
 ├── main_playbook.yaml       # Master orchestrator
 ├── inventory.ini            # Device inventory and connection vars
@@ -25,6 +26,7 @@ The project is structured to handle diverse hardware constraints, specifically m
     ├── media_server.yaml    # Linux patching and service health
     ├── network_hardware.yaml # Ubiquiti firmware deployment
     └── synology_nas.yaml    # Storage API checks
+```
 
 ## Usage
 
