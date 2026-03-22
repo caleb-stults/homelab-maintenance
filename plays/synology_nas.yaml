@@ -1,0 +1,51 @@
+---
+- name: Update Synology NAS via Direct API (URI)
+  hosts: nas
+  gather_facts: no
+  vars:
+    nas_url: "https://{{ inventory_hostname }}:5001"
+  tasks:
+    - name: 1. Login to DSM
+      ansible.builtin.uri:
+        url: "{{ nas_url }}/webapi/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account={{ vault_syno_user }}&passwd={{ vault_syno_pass }}&session=DSM&format=sid"
+        method: GET
+        validate_certs: no
+      register: login_response
+      # This forces the login even during a --check run
+      check_mode: no
+
+    - name: 2. Check for Available Updates
+      ansible.builtin.uri:
+        url: "{{ nas_url }}/webapi/entry.cgi?api=SYNO.Core.Upgrade&version=1&method=check&_sid={{ login_response.json.data.sid }}"
+        method: GET
+        validate_certs: no
+      register: update_check
+      when: login_response.json.success | default(false)
+      # This allows us to see if an update is ready during a --check run
+      check_mode: no
+
+    - name: 3. Report Status
+      ansible.builtin.debug:
+        msg: "Update Ready: {{ update_check.json.data.update_ready | default(false) }}"
+      when: update_check.json is defined
+
+    - name: 4. Trigger Update (IF READY)
+      ansible.builtin.uri:
+        url: "{{ nas_url }}/webapi/entry.cgi?api=SYNO.Core.Upgrade&version=1&method=start&_sid={{ login_response.json.data.sid }}"
+        method: POST
+        validate_certs: no
+        status_code: [200, 202]
+      # This task will NOT have check_mode: no, so it WILL be skipped during --check
+      when: 
+        - not ansible_check_mode
+        - login_response.json.success | default(false)
+        - update_check.json.data.update_ready | default(false) == True
+
+    - name: 5. Logout
+      ansible.builtin.uri:
+        url: "{{ nas_url }}/webapi/auth.cgi?api=SYNO.API.Auth&version=1&method=logout&_sid={{ login_response.json.data.sid }}"
+        method: GET
+        validate_certs: no
+      when: login_response.json.success | default(false)
+      check_mode: no
+      ignore_errors: yes

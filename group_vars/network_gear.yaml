@@ -1,0 +1,4 @@
+---
+# Firmware URLs - Update these strings when a new version is released
+er_firmware_url: "https://dl.ui.com/firmware/edgemax/v2.0.9-hotfix.7/ER-e100.v2.0.9-hotfix.7.tar"
+ap_firmware_url: "https://dl.ui.com/firmware/unifi/6.6.65/U7-PG.bin"

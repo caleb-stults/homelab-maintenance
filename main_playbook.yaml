@@ -1,0 +1,29 @@
+---
+- name: Master Home Lab Update Playbook
+  hosts: all
+  # Stop the automatic, global Python check
+  gather_facts: false 
+  vars_files:
+    - group_vars/all/vault.yaml
+
+  tasks:
+    - name: Gather facts for Linux servers only
+      ansible.builtin.setup:
+      # This skips the Python check for anything in your network_gear group
+      when: inventory_hostname not in groups['network_gear']
+
+# Now we import the rest as usual
+- name: Audit Network Hardware Versions (Read-Only)
+  import_playbook: plays/network_check.yaml
+
+- name: Update Network Controller (Ubuntu)
+  import_playbook: plays/network_controller.yaml
+
+- name: Update Media Server (Ubuntu)
+  import_playbook: plays/media_server.yaml
+
+- name: Update Network Hardware (Ubiquiti)
+  import_playbook: plays/network_hardware.yaml
+
+- name: Update Synology NAS (Direct API)
+  import_playbook: plays/synology_nas.yaml

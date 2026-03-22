@@ -1,0 +1,51 @@
+---
+- name: Update Network Hardware
+  hosts: network_gear
+  gather_facts: false
+  tasks:
+    - name: 1. Verify SSH Port 22 is open
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        state: started
+        timeout: 10
+      delegate_to: localhost
+
+    - name: 2. EdgeRouter - Check Version
+      ansible.builtin.raw: "/opt/vyatta/bin/vyatta-op-cmd-wrapper show version"
+      register: er_ver
+      when: inventory_hostname == 'edgerouter'
+      check_mode: false
+      changed_when: false
+
+    - name: 3. Access Point - Check Info
+      ansible.builtin.raw: "mca-cli-op info"
+      register: ap_info
+      when: inventory_hostname == 'access_point'
+      check_mode: false
+      changed_when: false
+
+    - name: 4. Display Hardware Status
+      ansible.builtin.debug:
+        msg: "{{ (er_ver.stdout_lines if inventory_hostname == 'edgerouter' else ap_info.stdout_lines) | default('No data returned') }}"
+
+    - name: 5. EdgeRouter - Trigger Update
+      ansible.builtin.raw: "add system image http://dl.ui.com/firmware/er-example.tar"
+      when:
+        - inventory_hostname == 'edgerouter'
+        - not ansible_check_mode
+      register: er_update
+
+    - name: 6. Access Point - Trigger Update
+      ansible.builtin.raw: "syswrapper.sh upgrade http://dl.ui.com/firmware/ap-example.bin"
+      when:
+        - inventory_hostname == 'access_point'
+        - not ansible_check_mode
+      register: ap_update
+
+    - name: 7. Report Update Triggered
+      ansible.builtin.debug:
+        msg: "Update initiated for {{ inventory_hostname }}. Device may reboot."
+      when: 
+        - not ansible_check_mode
+        - (er_update is touched or ap_update is touched)

@@ -1,0 +1,16 @@
+# Encrypted Sudo Password for Ubuntu Servers
+vault_become_pass: "server_password_here"
+
+# Synology Web API Credentials (2FA Exempt User)
+# NOTE: Create a dedicated user in DSM with "No 2FA" and "API Access" permissions, then update these vault variables accordingly.
+vault_syno_user: "username_here"
+vault_syno_pass: "password_here"
+
+# Ubiquiti Hardware Credentials (if different from SSH user)
+vault_er_user: "username_here"
+vault_ap_user: "username_here"
+vault_er_pass: 'password_here'
+vault_ap_pass: 'password_here'
+
+# Optional: Pi-hole Web UI password (if you decide to automate more)
+# vault_pihole_pass: "your_pihole_password"

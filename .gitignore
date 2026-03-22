@@ -1,0 +1,16 @@
+# Ansible execution artifacts
+*.retry
+*.log
+.ansible/
+
+# Security & Secrets
+*.key
+*.pem
+.vault_pass
+vault.yaml
+inventory.ini
+inventory.yaml
+
+# Python/Linux clutter
+__pycache__/
+.DS_Store

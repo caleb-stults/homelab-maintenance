@@ -1,0 +1,51 @@
+---
+- name: Hardware Update Checker
+  hosts: network_gear
+  gather_facts: false
+  tasks:
+    - name: 1. Gather Current Versions from Hardware
+      ansible.builtin.raw: "{{ '/opt/vyatta/bin/vyatta-op-cmd-wrapper show version | grep Version | awk \"{print \\$2}\"' if inventory_hostname == 'edgerouter' else 'mca-cli-op info | grep Version | awk \"{print \\$2}\"' }}"
+      register: current_ver_raw
+      check_mode: false
+
+    - name: 2. Initialize Variables
+      ansible.builtin.set_fact:
+        cur_v: "{{ current_ver_raw.stdout | trim }}"
+        latest_match: {"version": "API UNAVAILABLE", "download_url": "N/A"}
+
+    - name: 3. Attempt to Fetch Metadata
+      ansible.builtin.uri:
+        url: "https://fw-update.ubnt.com/api/v1/public/software/{{ 'edgemax' if inventory_hostname == 'edgerouter' else 'unifi' }}/latest"
+        method: GET
+        status_code: [200, 404]
+        timeout: 10
+      register: fw_api
+      delegate_to: localhost
+      ignore_errors: true
+
+    - name: 4. Extract Latest Data (If API Succeeded)
+      ansible.builtin.set_fact:
+        latest_match: >-
+          {{
+            fw_api.json._embedded.software 
+            | selectattr('name', 'search', 'ER-X' if inventory_hostname == 'edgerouter' else 'UAP-AC-Lite') 
+            | first | default({'version': 'Unknown', 'download_url': 'N/A'})
+          }}
+      when: 
+        - fw_api.status is defined 
+        - fw_api.status == 200
+
+    - name: 5. Final Report
+      ansible.builtin.debug:
+        msg:
+          - "Device:  {{ inventory_hostname }}"
+          - "Current: {{ cur_v }}"
+          - "Latest:  {{ latest_match.version }}"
+          - "Status:  {{ 'UPDATE AVAILABLE' if (latest_match.version != 'API UNAVAILABLE' and latest_match.version != 'Unknown' and cur_v not in latest_match.version) else 'UP TO DATE' }}"
+          - "Link:    {{ latest_match.download_url }}"
+
+    - name: 6. Awaiting Review
+      ansible.builtin.pause:
+        prompt: "Review the versions above. Press ENTER to continue with the lab updates, or Ctrl+C then 'A' to abort."
+      when: not ansible_check_mode
+      run_once: true
