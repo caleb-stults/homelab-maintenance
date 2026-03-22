@@ -31,13 +31,14 @@
 
     # --- POST-REBOOT VERIFICATION ---
 
-    - name: 6. Wait for Emby web interface (Port 8096)
+    - name: Wait for Emby web interface (Local Check)
       ansible.builtin.wait_for:
         port: 8096
-        host: "{{ ansible_host }}"
-        delay: 10
+        host: 127.0.0.1  # Check against itself
+        state: started
+        delay: 5
         timeout: 60
-      delegate_to: localhost
+      when: not ansible_check_mode
 
     - name: 7. Gather service status
       ansible.builtin.service_facts:
@@ -46,7 +47,7 @@
       ansible.builtin.assert:
         that:
           - ansible_facts.services['emby-server.service'].state == 'running'
-          - ansible_facts.services['tailscale.service'].state == 'running'
+          - ansible_facts.services['tailscaled.service'].state == 'running'
         fail_msg: "One or more critical services failed to start after reboot!"
         success_msg: "All services (Emby, Tailscale) are confirmed running."
 

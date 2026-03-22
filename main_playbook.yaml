@@ -13,8 +13,9 @@
       when: inventory_hostname not in groups['network_gear']
 
 # Now we import the rest as usual
-- name: Audit Network Hardware Versions (Read-Only)
-  import_playbook: plays/network_check.yaml
+# Currently skipping the network_check as the API is failing. Switched to an internal update method on the network_hardware playbook for now. Keeping as a reference for future API work.
+# - name: Audit Network Hardware Versions (Read-Only)
+#   import_playbook: plays/network_check.yaml
 
 - name: Update Network Controller (Ubuntu)
   import_playbook: plays/network_controller.yaml

@@ -1,29 +1,35 @@
 ---
-- name: Hardware Update Checker
+- name: Audit Network Hardware Versions
   hosts: network_gear
   gather_facts: false
   tasks:
-    - name: 1. Gather Current Versions from Hardware
-      ansible.builtin.raw: "{{ '/opt/vyatta/bin/vyatta-op-cmd-wrapper show version | grep Version | awk \"{print \\$2}\"' if inventory_hostname == 'edgerouter' else 'mca-cli-op info | grep Version | awk \"{print \\$2}\"' }}"
+    - name: 1. Get Current Version from Device
+      ansible.builtin.raw: >
+        {% if inventory_hostname == 'edgerouter' %}
+        /opt/vyatta/bin/vyatta-op-cmd-wrapper show version | grep Version | awk '{print $2}'
+        {% else %}
+        mca-cli-op info | grep Version | awk '{print $2}'
+        {% endif %}
       register: current_ver_raw
       check_mode: false
+      changed_when: false
 
-    - name: 2. Initialize Variables
+    - name: 2. Set Current Version Fact
       ansible.builtin.set_fact:
         cur_v: "{{ current_ver_raw.stdout | trim }}"
-        latest_match: {"version": "API UNAVAILABLE", "download_url": "N/A"}
 
-    - name: 3. Attempt to Fetch Metadata
+    - name: 3. Fetch Latest Metadata from Ubiquiti API
       ansible.builtin.uri:
         url: "https://fw-update.ubnt.com/api/v1/public/software/{{ 'edgemax' if inventory_hostname == 'edgerouter' else 'unifi' }}/latest"
         method: GET
-        status_code: [200, 404]
-        timeout: 10
+        status_code: [200]
+        timeout: 15
       register: fw_api
       delegate_to: localhost
-      ignore_errors: true
+      run_once: false # Run for each device type
+      check_mode: false
 
-    - name: 4. Extract Latest Data (If API Succeeded)
+    - name: 4. Parse API for Matching Model
       ansible.builtin.set_fact:
         latest_match: >-
           {{
@@ -31,21 +37,12 @@
             | selectattr('name', 'search', 'ER-X' if inventory_hostname == 'edgerouter' else 'UAP-AC-Lite') 
             | first | default({'version': 'Unknown', 'download_url': 'N/A'})
           }}
-      when: 
-        - fw_api.status is defined 
-        - fw_api.status == 200
 
-    - name: 5. Final Report
+    - name: 5. Generate Version Report
       ansible.builtin.debug:
         msg:
           - "Device:  {{ inventory_hostname }}"
           - "Current: {{ cur_v }}"
           - "Latest:  {{ latest_match.version }}"
-          - "Status:  {{ 'UPDATE AVAILABLE' if (latest_match.version != 'API UNAVAILABLE' and latest_match.version != 'Unknown' and cur_v not in latest_match.version) else 'UP TO DATE' }}"
-          - "Link:    {{ latest_match.download_url }}"
-
-    - name: 6. Awaiting Review
-      ansible.builtin.pause:
-        prompt: "Review the versions above. Press ENTER to continue with the lab updates, or Ctrl+C then 'A' to abort."
-      when: not ansible_check_mode
-      run_once: true
+          - "Update Required: {{ 'YES' if (latest_match.version != 'Unknown' and cur_v not in latest_match.version) else 'NO' }}"
+          - "URL:     {{ latest_match.download_url }}"
