@@ -1,13 +1,15 @@
+---
 - name: Update Network Controller
   hosts: network_controller
   become: yes
   vars:
     ansible_become_password: "{{ vault_become_pass }}"
+    unifi_version: "10.4.57-sdmmd510h6" 
   tasks:
     - name: 1. Force accept repository codename changes
       ansible.builtin.command: apt-get update --allow-releaseinfo-change
       changed_when: true
-
+      
     - name: 2. Upgrade all packages
       ansible.builtin.apt:
         update_cache: yes
@@ -20,8 +22,33 @@
       when: not ansible_check_mode
       changed_when: true
 
-    - name: 4. Update UniFi Application
-      apt: { name: unifi, state: latest }
+    - name: 4a. Ensure OpenJDK 21 and core utilities are installed
+      ansible.builtin.apt:
+        name:
+          - openjdk-21-jre-headless
+          - curl
+          - binutils
+          - jsvc
+        state: present
+
+    - name: 4b. Download the target UniFi version payload
+      ansible.builtin.get_url:
+        url: "https://dl.ui.com/unifi/{{ unifi_version }}/unifi_sysvinit_all.deb"
+        dest: /tmp/unifi_latest.deb
+        mode: '0644'
+      when: not ansible_check_mode
+
+    - name: 4c. Install/Update UniFi forcing dependency bypass cleanly
+      ansible.builtin.command: "dpkg -i --force-depends --force-confold --force-confdef /tmp/unifi_latest.deb"
+      when: not ansible_check_mode
+      register: dpkg_result
+      changed_when: "'Setting up unifi' in dpkg_result.stdout"
+
+    - name: 4d. Clean up downloaded installer
+      ansible.builtin.file:
+        path: /tmp/unifi_latest.deb
+        state: absent
+      when: not ansible_check_mode
 
     - name: 5. Check if reboot is required
       stat:
