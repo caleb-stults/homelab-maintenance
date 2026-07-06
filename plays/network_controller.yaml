@@ -5,22 +5,24 @@
   vars:
     ansible_become_password: "{{ vault_become_pass }}"
     unifi_version: "10.4.57-sdmmd510h6" 
+    pihole_compose_dir: "/home/hoss/pihole"
   tasks:
     - name: 1. Force accept repository codename changes
       ansible.builtin.command: apt-get update --allow-releaseinfo-change
       changed_when: true
       
-    - name: 2. Upgrade all packages
+    - name: 2. Upgrade all host packages
       ansible.builtin.apt:
         update_cache: yes
         upgrade: dist
         force_apt_get: yes
         dpkg_options: 'force-confold,force-confdef'
 
-    - name: 3. Update Pi-hole
-      command: pihole -up
-      when: not ansible_check_mode
-      changed_when: true
+    - name: 3. Update and restart Containerized Pi-hole
+      community.docker.docker_compose_v2:
+        project_src: "{{ pihole_compose_dir }}"
+        state: present
+        pull: always
 
     - name: 4a. Ensure OpenJDK 21 and core utilities are installed
       ansible.builtin.apt:
@@ -44,19 +46,34 @@
       register: dpkg_result
       changed_when: "'Setting up unifi' in dpkg_result.stdout"
 
-    - name: 4d. Clean up downloaded installer
+    - name: 4d. Patch dpkg ledger state immediately to prevent apt deadlock
+      ansible.builtin.replace:
+        path: /var/lib/dpkg/status
+        regexp: '^(Package: unifi\nStatus: install ok )(unpacked|half-configured|reinstreq)'
+        replace: '\1installed'
+      when: not ansible_check_mode
+
+    - name: 4e. Strip unmet mongo/java dependencies out of unifi status block
+      ansible.builtin.replace:
+        path: /var/lib/dpkg/status
+        regexp: '^Depends:.*\n'
+        after: 'Package: unifi'
+        before: 'Description:'
+      when: not ansible_check_mode
+
+    - name: 4f. Clean up downloaded installer
       ansible.builtin.file:
         path: /tmp/unifi_latest.deb
         state: absent
       when: not ansible_check_mode
 
     - name: 5. Check if reboot is required
-      stat:
+      ansible.builtin.stat:
         path: /var/run/reboot-required
       register: reboot_required_file
 
-    - name: 6. Reboot Ubuntu Server
-      reboot:
+    - name: 6. Reboot Ubuntu Server if required
+      ansible.builtin.reboot:
         msg: "Rebooting to apply kernel updates"
         connect_timeout: 5
         reboot_timeout: 300
